@@ -3,11 +3,16 @@ import pandas as pd
 from datetime import date, timedelta
 import webbrowser
 import requests
-from bs4 import BeautifulSoup
 import re
 import io
 import json
 import os
+
+# Import optionnel de BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 # ==============================================================================
 # CONFIGURATION DE LA PAGE
@@ -446,7 +451,6 @@ if "meds_db" not in st.session_state:
 # DONNÉES : PHARMACIES (liste complète avec ville et commune)
 # ==============================================================================
 if "pharmacies_db" not in st.session_state:
-    # Liste complète issue des images – toutes à Niamey, mais on ajoute quelques exemples pour d'autres villes
     pharmacy_data = [
         {"nom": "03 AOUT", "adresse": "Boulevard Mali-Bero", "tel": "20 35 18 18 // 90 86 83 96", "commune": "COMMUNE I", "ville": "Niamey"},
         {"nom": "2EME FORAGE", "adresse": "BP 219", "tel": "20 75 27 90", "commune": "COMMUNE I", "ville": "Niamey"},
@@ -589,8 +593,7 @@ if "pharmacies_db" not in st.session_state:
         {"nom": "ZAM ZAM", "adresse": "Lazaret Ilôt 5055 Parcelle B", "tel": "", "commune": "COMMUNE II", "ville": "Niamey"},
         {"nom": "ZANA", "adresse": "Quartier ORTN Rue OR Banifando", "tel": "91 14 58 37", "commune": "COMMUNE III", "ville": "Niamey"},
         {"nom": "ZARA EX CAMPING", "adresse": "Niamey", "tel": "20 35 03 87", "commune": "COMMUNE I", "ville": "Niamey"},
-
-        # --- Quelques pharmacies fictives dans d'autres villes pour démo ---
+        # Exemples pour d'autres villes
         {"nom": "PHARMACIE ZINDER CENTRE", "adresse": "Avenue de l'Indépendance", "tel": "80 00 11 22", "commune": "COMMUNE I", "ville": "Zinder"},
         {"nom": "PHARMACIE MARADI NORD", "adresse": "Route de Niamey", "tel": "80 00 33 44", "commune": "COMMUNE I", "ville": "Maradi"},
         {"nom": "PHARMACIE TAHOUA", "adresse": "Boulevard de la Paix", "tel": "80 00 55 66", "commune": "COMMUNE I", "ville": "Tahoua"},
@@ -622,13 +625,12 @@ if "stock_db" not in st.session_state:
     st.session_state.stock_db = stock_db
 
 # ==============================================================================
-# STYLES CSS (thème clair/sombre et design amélioré)
+# STYLES CSS (thème clair/sombre)
 # ==============================================================================
 def apply_theme(theme):
     if theme == "sombre":
         return """
         <style>
-            /* Thème sombre */
             .stApp { background: #0f0f1a !important; color: #e0e0e0; }
             .card, .stButton > button, .stTextInput > div > div > input, .stSelectbox > div > div, .chat-message-assistant {
                 background: #1a1a2e !important;
@@ -658,7 +660,6 @@ def apply_theme(theme):
     else:
         return """
         <style>
-            /* Thème clair amélioré */
             .stApp { background: linear-gradient(145deg, #f0f4f3 0%, #e6eceb 100%) !important; }
             .card, .stButton > button, .stTextInput > div > div > input, .stSelectbox > div > div, .chat-message-assistant {
                 background: white !important;
@@ -698,6 +699,9 @@ def navigate(page):
     st.rerun()
 
 def actualiser_prix_medicaments():
+    if BeautifulSoup is None:
+        st.warning("⚠️ La bibliothèque BeautifulSoup n'est pas installée. Impossible d'actualiser les prix.")
+        return 0, 0
     try:
         url = "https://www.lahiya-tech.com/les-pharmacies-de-niamey/"
         response = requests.get(url, timeout=10)
@@ -725,7 +729,7 @@ def actualiser_prix_medicaments():
                     break
         return nb_updated, len(prix_trouves)
     except Exception as e:
-        st.error(f"❌ Erreur : {str(e)}")
+        st.error(f"❌ Erreur lors de l'actualisation : {str(e)}")
         return 0, 0
 
 # ==============================================================================
@@ -735,19 +739,18 @@ theme_css = apply_theme(st.session_state.theme)
 st.markdown(theme_css, unsafe_allow_html=True)
 
 # ==============================================================================
-# SIDEBAR AVEC SÉLECTEUR DE VILLE
+# SIDEBAR
 # ==============================================================================
 with st.sidebar:
-    st.markdown("""
+    st.markdown(f"""
     <div class="sidebar-logo">
         <span>🇳🇪</span>
         <h2 class="sidebar-title">PharmaNiger</h2>
-        <p class="sidebar-subtitle">Santé publique </p>
+        <p class="sidebar-subtitle">Santé publique • {len(st.session_state.meds_db)} médicaments</p>
     </div>
-    """.format(len(st.session_state.meds_db)), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     st.markdown("<hr class='sidebar-sep'>", unsafe_allow_html=True)
 
-    # Sélecteur de ville (global dans la sidebar)
     villes = ["Toutes les villes"] + sorted(list(set(p["ville"] for p in st.session_state.pharmacies_db)))
     st.session_state.ville_filter = st.selectbox("📍 Choisir une ville", villes, index=villes.index(st.session_state.ville_filter))
 
@@ -813,13 +816,16 @@ with st.sidebar:
 # ACCUEIL
 # ------------------------------------------------------------------------------
 if st.session_state.page == "Accueil":
-    st.markdown("""
-    <div class="header-main">
+    st.markdown(f"""
+    <div class="header-main" style="text-align: center;">
         <h1>💊 PharmaNiger</h1>
-        <p>Votre santé, notre priorité. Retrouvez toutes les pharmacies de garde et les prix des médicaments au Niger.</p>
-        <span class="header-badge">🇳🇪 {} • {} pharmacies</span>
+        <p style="text-align: center;">Votre santé, notre priorité. Retrouvez toutes les pharmacies de garde et les prix des médicaments au Niger.</p>
+        <span class="header-badge">🇳🇪 {st.session_state.ville_filter} • {len(st.session_state.pharmacies_db)} pharmacies</span>
     </div>
-    """.format(st.session_state.ville_filter, len(st.session_state.pharmacies_db)), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🟢 Pharmacies de garde", use_container_width=True):
@@ -835,11 +841,12 @@ if st.session_state.page == "Accueil":
             navigate("Chatbot")
         if st.button("📈 Dashboard", use_container_width=True):
             navigate("Dashboard")
+
     st.markdown("---")
     st.caption(f"Dernière mise à jour : {date.today().strftime('%d/%m/%Y')}  |  {len(st.session_state.meds_db)} médicaments référencés")
 
 # ------------------------------------------------------------------------------
-# PHARMACIES DE GARDE avec filtres (ville + commune)
+# PHARMACIES DE GARDE
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Pharmacies de Garde":
     st.markdown("""
@@ -848,7 +855,7 @@ elif st.session_state.page == "Pharmacies de Garde":
         <p style="margin:4px 0 0 0;">Service de nuit et jours fériés</p>
     </div>
     """, unsafe_allow_html=True)
-    # Filtrer par ville sélectionnée
+
     if st.session_state.ville_filter != "Toutes les villes":
         gardes_actives = [p for p in st.session_state.pharmacies_db if p.get("est_de_garde", True) and p["ville"] == st.session_state.ville_filter]
     else:
@@ -897,7 +904,7 @@ elif st.session_state.page == "Pharmacies de Garde":
                 st.rerun()
 
 # ------------------------------------------------------------------------------
-# TOUTES LES PHARMACIES avec filtres (ville + commune)
+# TOUTES LES PHARMACIES
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Toutes les Pharmacies":
     st.markdown("""
@@ -907,7 +914,6 @@ elif st.session_state.page == "Toutes les Pharmacies":
     </div>
     """, unsafe_allow_html=True)
 
-    # Filtrer par ville sélectionnée
     if st.session_state.ville_filter != "Toutes les villes":
         pharma_base = [p for p in st.session_state.pharmacies_db if p["ville"] == st.session_state.ville_filter]
     else:
@@ -958,7 +964,7 @@ elif st.session_state.page == "Toutes les Pharmacies":
                 st.rerun()
 
 # ------------------------------------------------------------------------------
-# PRIX DES MÉDICAMENTS (identique)
+# PRIX DES MÉDICAMENTS
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Prix des Médicaments":
     st.markdown("""
@@ -1004,7 +1010,7 @@ elif st.session_state.page == "Prix des Médicaments":
                 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# GESTION DES STOCKS (identique)
+# GESTION DES STOCKS
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Gestion Médicaments":
     st.markdown("""
@@ -1076,7 +1082,7 @@ elif st.session_state.page == "Gestion Médicaments":
         st.balloons()
 
 # ------------------------------------------------------------------------------
-# CHATBOT (identique)
+# CHATBOT
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Chatbot":
     st.markdown("""
