@@ -658,12 +658,13 @@ if "stock_db" not in st.session_state:
     st.session_state.stock_db = stock_db
 
 # ==============================================================================
-# STYLES CSS (thème clair/sombre) – avec améliorations responsives
+# STYLES CSS (amélioration radicale de la lisibilité mobile)
 # ==============================================================================
 def apply_theme(theme):
     if theme == "sombre":
         return """
         <style>
+            /* Mode sombre – déjà lisible, on garde */
             .stApp { background: #0f0f1a !important; color: #e0e0e0; }
             .card, .stButton > button, .stTextInput > div > div > input, .stSelectbox > div > div, .chat-message-assistant {
                 background: #1a1a2e !important;
@@ -688,7 +689,22 @@ def apply_theme(theme):
             .badge-count { background: #2a6a4a !important; }
             .footer a { color: #7fdb9f !important; }
             .stSelectbox label, .stTextInput label { color: #c0c0d0 !important; }
-            /* Chat flottant */
+
+            /* Mobile : texte lisible */
+            .streamlit-expanderHeader {
+                color: #e0e0e0 !important;
+                font-size: 1.1rem !important;
+                font-weight: 600 !important;
+            }
+            .streamlit-expanderContent {
+                color: #c0c0c0 !important;
+                font-size: 1rem !important;
+                line-height: 1.6 !important;
+            }
+            .streamlit-expanderContent p, .streamlit-expanderContent li {
+                color: #c0c0c0 !important;
+            }
+
             .chat-fixed {
                 position: fixed;
                 bottom: 20px;
@@ -744,18 +760,21 @@ def apply_theme(theme):
                 .chat-fixed { width: 90%; right: 5%; bottom: 10px; }
                 .header-main h1 { font-size: 1.5rem; }
                 .card { padding: 0.8rem; }
+                .streamlit-expanderHeader { font-size: 1.1rem !important; }
+                .streamlit-expanderContent { font-size: 1rem !important; }
             }
         </style>
         """
     else:
         return """
         <style>
-            .stApp { background: linear-gradient(145deg, #f0f4f3 0%, #e6eceb 100%) !important; }
+            /* Mode clair – TOUT EN NOIR pour une lisibilité maximale */
+            .stApp { background: #f8faf9 !important; color: #1a1a1a !important; }
             .card, .stButton > button, .stTextInput > div > div > input, .stSelectbox > div > div, .chat-message-assistant {
                 background: white !important;
-                color: #1e2e2e !important;
+                color: #1a1a1a !important;
                 border-radius: 16px !important;
-                border: 1px solid rgba(0,0,0,0.04) !important;
+                border: 1px solid rgba(0,0,0,0.08) !important;
                 box-shadow: 0 4px 16px rgba(0,0,0,0.04) !important;
                 transition: all 0.2s ease;
             }
@@ -764,7 +783,9 @@ def apply_theme(theme):
                 background: linear-gradient(135deg, #2b9348 0%, #007f5f 100%) !important;
                 border-radius: 24px !important;
                 box-shadow: 0 10px 30px -10px rgba(0,80,50,0.3) !important;
+                color: white !important;
             }
+            .header-main h1, .header-main p, .header-main span { color: white !important; }
             .statut-garde { background: #d4edda !important; color: #155724 !important; }
             .statut-non-garde { background: #f8d7da !important; color: #721c24 !important; }
             .notice-box { background: #f8f9fa !important; border-color: #e9ecef !important; }
@@ -772,13 +793,51 @@ def apply_theme(theme):
             .sidebar-logo .sidebar-title { color: #2b9348 !important; }
             .sidebar-logo .sidebar-subtitle { color: #6b7a7a !important; }
             .stButton > button:hover { background: #eaf5ef !important; border-left-color: #2b9348 !important; }
-            .commune-tag { background: #005f73 !important; }
+            .commune-tag { background: #005f73 !important; color: white !important; }
             .card-pharma .tel { color: #005f73 !important; }
             .card-med .price { color: #d97706 !important; }
-            .badge-count { background: #2b9348 !important; }
+            .badge-count { background: #2b9348 !important; color: white !important; }
             .footer a { color: #2b9348 !important; }
             .stSelectbox label, .stTextInput label { color: #3a4a4a !important; font-weight: 500; }
-            /* Chat flottant */
+
+            /* --- AMÉLIORATION MOBILE : texte noir, grande police --- */
+            /* Tout le texte des expanders */
+            .streamlit-expanderHeader {
+                color: #1a1a1a !important;
+                font-size: 1.15rem !important;
+                font-weight: 700 !important;
+                background: transparent !important;
+            }
+            .streamlit-expanderContent {
+                color: #1a1a1a !important;
+                font-size: 1.05rem !important;
+                line-height: 1.7 !important;
+            }
+            .streamlit-expanderContent p,
+            .streamlit-expanderContent li,
+            .streamlit-expanderContent div,
+            .streamlit-expanderContent span {
+                color: #1a1a1a !important;
+            }
+            /* Forcer le noir pour tous les textes des cartes et conteneurs */
+            .card, .card p, .card li, .card span, .card h4, .card h5, .card div {
+                color: #1a1a1a !important;
+            }
+            .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span, .stMarkdown div {
+                color: #1a1a1a !important;
+            }
+            /* Les boutons en dehors des cartes */
+            .stButton > button {
+                color: #1a1a1a !important;
+            }
+            .stButton > button:hover {
+                color: #1a1a1a !important;
+            }
+            /* Les labels des inputs */
+            .stTextInput label, .stSelectbox label {
+                color: #1a1a1a !important;
+            }
+
             .chat-fixed {
                 position: fixed;
                 bottom: 20px;
@@ -797,14 +856,18 @@ def apply_theme(theme):
                 justify-content: space-between;
                 align-items: center;
                 margin-bottom: 8px;
-                color: #1e2e2e;
+                color: #1a1a1a;
                 font-weight: bold;
             }
             .chat-fixed .chat-messages {
                 max-height: 300px;
                 overflow-y: auto;
                 margin-bottom: 8px;
-                font-size: 0.9rem;
+                font-size: 0.95rem;
+                color: #1a1a1a !important;
+            }
+            .chat-fixed .chat-messages div {
+                color: #1a1a1a !important;
             }
             .chat-fixed .chat-input {
                 display: flex;
@@ -815,6 +878,7 @@ def apply_theme(theme):
                 border-radius: 8px;
                 border: 1px solid #d0d9d6;
                 padding: 8px;
+                color: #1a1a1a !important;
             }
             .chat-fixed .chat-input button {
                 background: #2b9348;
@@ -832,6 +896,11 @@ def apply_theme(theme):
                 .chat-fixed { width: 90%; right: 5%; bottom: 10px; }
                 .header-main h1 { font-size: 1.5rem; }
                 .card { padding: 0.8rem; }
+                .streamlit-expanderHeader { font-size: 1.1rem !important; }
+                .streamlit-expanderContent { font-size: 1rem !important; }
+                /* Augmenter la taille du texte dans les cartes */
+                .card h4 { font-size: 1.1rem !important; }
+                .card p, .card li { font-size: 0.95rem !important; }
             }
         </style>
         """
@@ -879,7 +948,6 @@ def actualiser_prix_medicaments():
             return 0, 0
 
 def mettre_a_jour_pharmacies_garde():
-    """Scrape le site https://www.medic-rdv.com/rdv/pharmacidegarde et met à jour les statuts de garde."""
     if BeautifulSoup is None:
         st.warning("⚠️ BeautifulSoup non disponible, impossible de scraper. Veuillez ouvrir le site manuellement.")
         return False
@@ -1489,7 +1557,7 @@ elif st.session_state.page == "Chatbot":
         st.markdown(f"<div style='display:flex; justify-content:flex-start;'><div class='chat-message-assistant'>{reponse}</div></div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# CONSEILS SANTÉ (avec numéros d'urgence)
+# CONSEILS SANTÉ (avec numéros d'urgence et police améliorée)
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Conseils Santé":
     st.markdown("""
