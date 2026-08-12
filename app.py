@@ -7,6 +7,8 @@ import re
 import io
 import json
 import os
+import time
+import urllib.parse
 
 # Import optionnel de BeautifulSoup
 try:
@@ -25,7 +27,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# PERSISTANCE DES FAVORIS (fichier JSON)
+# PERSISTANCE DES FAVORIS
 # ==============================================================================
 FAVORIS_FILE = "favoris.json"
 
@@ -61,6 +63,8 @@ if "ville_filter" not in st.session_state:
     st.session_state.ville_filter = "Toutes les villes"
 if "commune_filter" not in st.session_state:
     st.session_state.commune_filter = "Toutes les Communes"
+if "chat_ouvert" not in st.session_state:
+    st.session_state.chat_ouvert = False
 
 # ==============================================================================
 # DONNÉES : MÉDICAMENTS (102 entrées)
@@ -448,10 +452,19 @@ if "meds_db" not in st.session_state:
     ]
 
 # ==============================================================================
-# DONNÉES : PHARMACIES (liste complète avec ville et commune)
+# DONNÉES : PHARMACIES (liste enrichie avec toutes les villes du Niger)
 # ==============================================================================
 if "pharmacies_db" not in st.session_state:
-    pharmacy_data = [
+    # Liste des villes du Niger (régions et chefs-lieux)
+    villes_niger = [
+        "Niamey", "Zinder", "Maradi", "Tahoua", "Agadez", "Diffa",
+        "Dosso", "Tillabéri", "Arlit", "Birni N'Konni", "Gaya",
+        "Madaoua", "Magaria", "Mayahi", "Mirriah", "N'guigmi",
+        "Ouallam", "Say", "Téra", "Tessaoua"
+    ]
+
+    # Pharmacies de Niamey (liste complète issue des images)
+    niamey_pharmacies = [
         {"nom": "03 AOUT", "adresse": "Boulevard Mali-Bero", "tel": "20 35 18 18 // 90 86 83 96", "commune": "COMMUNE I", "ville": "Niamey"},
         {"nom": "2EME FORAGE", "adresse": "BP 219", "tel": "20 75 27 90", "commune": "COMMUNE I", "ville": "Niamey"},
         {"nom": "7 THERAPIES", "adresse": "Quartier Bobiel Ilôt 5069 /H", "tel": "21 66 21 58 // 98 78 16 45 // 99 08 12 87", "commune": "COMMUNE I", "ville": "Niamey"},
@@ -592,17 +605,37 @@ if "pharmacies_db" not in st.session_state:
         {"nom": "YANTALA", "adresse": "1, Avenue de Niamey, BP 128", "tel": "20 75 24 39 // 20 75 38 83", "commune": "COMMUNE I", "ville": "Niamey"},
         {"nom": "ZAM ZAM", "adresse": "Lazaret Ilôt 5055 Parcelle B", "tel": "", "commune": "COMMUNE II", "ville": "Niamey"},
         {"nom": "ZANA", "adresse": "Quartier ORTN Rue OR Banifando", "tel": "91 14 58 37", "commune": "COMMUNE III", "ville": "Niamey"},
-        {"nom": "ZARA EX CAMPING", "adresse": "Niamey", "tel": "20 35 03 87", "commune": "COMMUNE I", "ville": "Niamey"},
-        # Exemples pour d'autres villes
+        {"nom": "ZARA EX CAMPING", "adresse": "Niamey", "tel": "20 35 03 87", "commune": "COMMUNE I", "ville": "Niamey"}
+    ]
+
+    # Pharmacies des autres villes (exemples)
+    autres_villes = [
         {"nom": "PHARMACIE ZINDER CENTRE", "adresse": "Avenue de l'Indépendance", "tel": "80 00 11 22", "commune": "COMMUNE I", "ville": "Zinder"},
         {"nom": "PHARMACIE MARADI NORD", "adresse": "Route de Niamey", "tel": "80 00 33 44", "commune": "COMMUNE I", "ville": "Maradi"},
         {"nom": "PHARMACIE TAHOUA", "adresse": "Boulevard de la Paix", "tel": "80 00 55 66", "commune": "COMMUNE I", "ville": "Tahoua"},
         {"nom": "PHARMACIE DOSSO", "adresse": "Avenue du Niger", "tel": "80 00 77 88", "commune": "COMMUNE I", "ville": "Dosso"},
         {"nom": "PHARMACIE AGADEZ", "adresse": "Route de l'Aéroport", "tel": "80 00 99 00", "commune": "COMMUNE I", "ville": "Agadez"},
+        {"nom": "PHARMACIE DIFFA", "adresse": "Avenue de la Liberté", "tel": "80 10 11 12", "commune": "COMMUNE I", "ville": "Diffa"},
+        {"nom": "PHARMACIE TILLABERI", "adresse": "Boulevard du Fleuve", "tel": "80 20 30 40", "commune": "COMMUNE I", "ville": "Tillabéri"},
+        {"nom": "PHARMACIE ARLIT", "adresse": "Rue des Mines", "tel": "80 50 60 70", "commune": "COMMUNE I", "ville": "Arlit"},
+        {"nom": "PHARMACIE BIRNI N'KONNI", "adresse": "Avenue de l'Indépendance", "tel": "80 80 90 00", "commune": "COMMUNE I", "ville": "Birni N'Konni"},
+        {"nom": "PHARMACIE GAYA", "adresse": "Route de Dosso", "tel": "80 12 34 56", "commune": "COMMUNE I", "ville": "Gaya"},
+        {"nom": "PHARMACIE MADOUA", "adresse": "Avenue du Marché", "tel": "80 23 45 67", "commune": "COMMUNE I", "ville": "Madaoua"},
+        {"nom": "PHARMACIE MAGARIA", "adresse": "Route de Zinder", "tel": "80 34 56 78", "commune": "COMMUNE I", "ville": "Magaria"},
+        {"nom": "PHARMACIE MAYAHI", "adresse": "Boulevard du Niger", "tel": "80 45 67 89", "commune": "COMMUNE I", "ville": "Mayahi"},
+        {"nom": "PHARMACIE MIRRIAH", "adresse": "Avenue de la Paix", "tel": "80 56 78 90", "commune": "COMMUNE I", "ville": "Mirriah"},
+        {"nom": "PHARMACIE N'GUIGMI", "adresse": "Rue du Lac", "tel": "80 67 89 01", "commune": "COMMUNE I", "ville": "N'guigmi"},
+        {"nom": "PHARMACIE OUALLAM", "adresse": "Route de Tillabéri", "tel": "80 78 90 12", "commune": "COMMUNE I", "ville": "Ouallam"},
+        {"nom": "PHARMACIE SAY", "adresse": "Avenue du Fleuve", "tel": "80 89 01 23", "commune": "COMMUNE I", "ville": "Say"},
+        {"nom": "PHARMACIE TERA", "adresse": "Boulevard de la République", "tel": "80 90 12 34", "commune": "COMMUNE I", "ville": "Téra"},
+        {"nom": "PHARMACIE TESSAOUA", "adresse": "Route de Zinder", "tel": "80 01 23 45", "commune": "COMMUNE I", "ville": "Tessaoua"}
     ]
 
+    # Fusionner toutes les pharmacies
+    toutes_pharmacies = niamey_pharmacies + autres_villes
+
     pharmacies_db = []
-    for idx, p in enumerate(pharmacy_data, start=1):
+    for idx, p in enumerate(toutes_pharmacies, start=1):
         pharmacies_db.append({
             "id": idx,
             "nom": p["nom"],
@@ -625,7 +658,7 @@ if "stock_db" not in st.session_state:
     st.session_state.stock_db = stock_db
 
 # ==============================================================================
-# STYLES CSS (thème clair/sombre)
+# STYLES CSS (thème clair/sombre) – avec améliorations responsives
 # ==============================================================================
 def apply_theme(theme):
     if theme == "sombre":
@@ -655,6 +688,63 @@ def apply_theme(theme):
             .badge-count { background: #2a6a4a !important; }
             .footer a { color: #7fdb9f !important; }
             .stSelectbox label, .stTextInput label { color: #c0c0d0 !important; }
+            /* Chat flottant */
+            .chat-fixed {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 360px;
+                max-width: 90%;
+                z-index: 9999;
+                background: #1a1a2e;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+                padding: 12px;
+                border: 1px solid #2a2a4e;
+            }
+            .chat-fixed .chat-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+                color: #e0e0e0;
+                font-weight: bold;
+            }
+            .chat-fixed .chat-messages {
+                max-height: 300px;
+                overflow-y: auto;
+                margin-bottom: 8px;
+                font-size: 0.9rem;
+            }
+            .chat-fixed .chat-input {
+                display: flex;
+                gap: 8px;
+            }
+            .chat-fixed .chat-input input {
+                flex: 1;
+                border-radius: 8px;
+                border: 1px solid #2a2a4e;
+                background: #0f0f1a;
+                color: #e0e0e0;
+                padding: 8px;
+            }
+            .chat-fixed .chat-input button {
+                background: #2b9348;
+                border: none;
+                border-radius: 8px;
+                color: white;
+                padding: 8px 16px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            .chat-fixed .chat-input button:hover {
+                background: #007f5f;
+            }
+            @media (max-width: 640px) {
+                .chat-fixed { width: 90%; right: 5%; bottom: 10px; }
+                .header-main h1 { font-size: 1.5rem; }
+                .card { padding: 0.8rem; }
+            }
         </style>
         """
     else:
@@ -688,6 +778,61 @@ def apply_theme(theme):
             .badge-count { background: #2b9348 !important; }
             .footer a { color: #2b9348 !important; }
             .stSelectbox label, .stTextInput label { color: #3a4a4a !important; font-weight: 500; }
+            /* Chat flottant */
+            .chat-fixed {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 360px;
+                max-width: 90%;
+                z-index: 9999;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+                padding: 12px;
+                border: 1px solid #e0e8e5;
+            }
+            .chat-fixed .chat-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+                color: #1e2e2e;
+                font-weight: bold;
+            }
+            .chat-fixed .chat-messages {
+                max-height: 300px;
+                overflow-y: auto;
+                margin-bottom: 8px;
+                font-size: 0.9rem;
+            }
+            .chat-fixed .chat-input {
+                display: flex;
+                gap: 8px;
+            }
+            .chat-fixed .chat-input input {
+                flex: 1;
+                border-radius: 8px;
+                border: 1px solid #d0d9d6;
+                padding: 8px;
+            }
+            .chat-fixed .chat-input button {
+                background: #2b9348;
+                border: none;
+                border-radius: 8px;
+                color: white;
+                padding: 8px 16px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            .chat-fixed .chat-input button:hover {
+                background: #007f5f;
+            }
+            @media (max-width: 640px) {
+                .chat-fixed { width: 90%; right: 5%; bottom: 10px; }
+                .header-main h1 { font-size: 1.5rem; }
+                .card { padding: 0.8rem; }
+            }
         </style>
         """
 
@@ -702,35 +847,73 @@ def actualiser_prix_medicaments():
     if BeautifulSoup is None:
         st.warning("⚠️ La bibliothèque BeautifulSoup n'est pas installée. Impossible d'actualiser les prix.")
         return 0, 0
+    with st.spinner("⏳ Récupération des prix en cours..."):
+        try:
+            url = "https://www.lahiya-tech.com/les-pharmacies-de-niamey/"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+            text = soup.get_text()
+            pattern = r'([A-Z0-9\s]+)\s+(\d+[\s,]*\d*)\s*(FCFA|CFA|Franc)'
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            prix_trouves = {}
+            for match in matches:
+                nom = match[0].strip()
+                prix_str = match[1].replace(' ', '').replace(',', '')
+                try:
+                    prix = int(prix_str)
+                    prix_trouves[nom[:50]] = prix
+                except ValueError:
+                    continue
+            nb_updated = 0
+            for med in st.session_state.meds_db:
+                for nom_site, prix in prix_trouves.items():
+                    if any(mot in med['nom'].upper() for mot in nom_site.upper().split()[:3]):
+                        if med['prix_fcfa'] != prix:
+                            med['prix_fcfa'] = prix
+                            nb_updated += 1
+                        break
+            return nb_updated, len(prix_trouves)
+        except Exception as e:
+            st.error(f"❌ Erreur lors de l'actualisation : {str(e)}")
+            return 0, 0
+
+def mettre_a_jour_pharmacies_garde():
+    """Scrape le site https://www.medic-rdv.com/rdv/pharmacidegarde et met à jour les statuts de garde."""
+    if BeautifulSoup is None:
+        st.warning("⚠️ BeautifulSoup non disponible, impossible de scraper. Veuillez ouvrir le site manuellement.")
+        return False
     try:
-        url = "https://www.lahiya-tech.com/les-pharmacies-de-niamey/"
+        url = "https://www.medic-rdv.com/rdv/pharmacidegarde"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         text = soup.get_text()
-        pattern = r'([A-Z0-9\s]+)\s+(\d+[\s,]*\d*)\s*(FCFA|CFA|Franc)'
+        pattern = r'Pharmacie\s+([A-Z0-9\s]+)'
         matches = re.findall(pattern, text, re.IGNORECASE)
-        prix_trouves = {}
-        for match in matches:
-            nom = match[0].strip()
-            prix_str = match[1].replace(' ', '').replace(',', '')
-            try:
-                prix = int(prix_str)
-                prix_trouves[nom[:50]] = prix
-            except ValueError:
-                continue
+        noms_trouves = []
+        for m in matches:
+            nom = m.strip()
+            if len(nom) > 2:
+                noms_trouves.append(nom.upper())
+        if not noms_trouves:
+            st.warning("⚠️ Aucun nom de pharmacie trouvé sur le site. La mise à jour automatique a échoué.")
+            return False
+        for p in st.session_state.pharmacies_db:
+            p["est_de_garde"] = False
         nb_updated = 0
-        for med in st.session_state.meds_db:
-            for nom_site, prix in prix_trouves.items():
-                if any(mot in med['nom'].upper() for mot in nom_site.upper().split()[:3]):
-                    if med['prix_fcfa'] != prix:
-                        med['prix_fcfa'] = prix
-                        nb_updated += 1
+        for p in st.session_state.pharmacies_db:
+            nom_pharma = p["nom"].upper()
+            for nom_site in noms_trouves:
+                if nom_pharma in nom_site or nom_site in nom_pharma:
+                    p["est_de_garde"] = True
+                    nb_updated += 1
                     break
-        return nb_updated, len(prix_trouves)
+        st.toast(f"✅ {nb_updated} pharmacies marquées comme de garde", icon="🔄")
+        return True
     except Exception as e:
-        st.error(f"❌ Erreur lors de l'actualisation : {str(e)}")
-        return 0, 0
+        st.error(f"❌ Erreur lors de la mise à jour : {str(e)}")
+        return False
 
 # ==============================================================================
 # APPLICATION DU THÈME
@@ -739,23 +922,29 @@ theme_css = apply_theme(st.session_state.theme)
 st.markdown(theme_css, unsafe_allow_html=True)
 
 # ==============================================================================
-# SIDEBAR
+# SIDEBAR (sans bouton "Mise à jour")
 # ==============================================================================
 with st.sidebar:
-    st.markdown(f"""
+    st.markdown("""
     <div class="sidebar-logo">
         <span>🇳🇪</span>
         <h2 class="sidebar-title">PharmaNiger</h2>
-        <p class="sidebar-subtitle">Santé publique • {len(st.session_state.meds_db)} médicaments</p>
+        <p class="sidebar-subtitle">Santé publique</p>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("<hr class='sidebar-sep'>", unsafe_allow_html=True)
 
+    # Sélecteur de ville
     villes = ["Toutes les villes"] + sorted(list(set(p["ville"] for p in st.session_state.pharmacies_db)))
     st.session_state.ville_filter = st.selectbox("📍 Choisir une ville", villes, index=villes.index(st.session_state.ville_filter))
 
+    # Accueil
     if st.button("🏠 Accueil", key="nav_accueil"):
         navigate("Accueil")
+
+    # Dashboard juste après Accueil
+    if st.button("📈 Dashboard", key="nav_dashboard"):
+        navigate("Dashboard")
 
     st.markdown("<div class='sidebar-section'>🏥 Pharmacies</div>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -771,8 +960,6 @@ with st.sidebar:
     with col1:
         if st.button("📋 Prix & Notices", key="nav_meds"):
             navigate("Prix des Médicaments")
-        if st.button("📦 Stocks", key="nav_stock"):
-            navigate("Gestion Médicaments")
     with col2:
         if st.button("📊 Gestion", key="nav_gestion"):
             navigate("Gestion Médicaments")
@@ -782,17 +969,9 @@ with st.sidebar:
     with col1:
         if st.button("💬 Chat", key="nav_chat"):
             navigate("Chatbot")
-        if st.button("⚙️ Mise à jour", key="nav_maj"):
-            navigate("Mise à jour de la Garde")
     with col2:
         if st.button("🆘 Conseils", key="nav_conseils"):
             navigate("Conseils Santé")
-        if st.button("📤 Export", key="nav_export"):
-            navigate("Export")
-
-    st.markdown("<div class='sidebar-section'>📊 Dashboard</div>", unsafe_allow_html=True)
-    if st.button("📈 Tableau de bord", key="nav_dashboard"):
-        navigate("Dashboard")
 
     st.markdown("<div class='sidebar-section'>💬 Retour</div>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -800,12 +979,60 @@ with st.sidebar:
         if st.button("💬 Feedback", key="nav_feedback"):
             navigate("Feedback")
     with col2:
-        if st.button("👨‍💻 À propos", key="nav_about"):
+        if st.button("👩‍💻 À propos", key="nav_about"):
             navigate("A propos de l'auteur...")
 
     st.markdown("---")
     if st.button("🌓 Changer de thème", use_container_width=True):
         st.session_state.theme = "sombre" if st.session_state.theme == "clair" else "clair"
+        st.rerun()
+
+    # Chatbot en bas de la sidebar
+    st.markdown("---")
+    st.markdown("### 💬 PharmaBot (aide instantanée)")
+    for msg in st.session_state.chat_messages[-3:]:
+        if msg["role"] == "user":
+            st.markdown(f"🧑 **Vous :** {msg['content']}")
+        else:
+            st.markdown(f"🤖 **PharmaBot :** {msg['content']}")
+    user_input = st.chat_input("Posez votre question ici...")
+    if user_input:
+        st.session_state.chat_messages.append({"role": "user", "content": user_input})
+        prompt_lower = user_input.lower()
+        reponse = ""
+        medicament_trouve = None
+        for med in st.session_state.meds_db:
+            if med['nom'].lower() in prompt_lower or any(mot in prompt_lower for mot in med['nom'].lower().split()):
+                medicament_trouve = med
+                break
+        if medicament_trouve:
+            med = medicament_trouve
+            if "posologie" in prompt_lower or "dose" in prompt_lower or "prendre" in prompt_lower:
+                reponse = f"💊 **{med['nom']}**\n📋 **Indications :** {med.get('indications', 'N/R')}\n🧑 **Adulte :** {med.get('posologie_adulte', 'N/R')}\n🧒 **Enfant :** {med.get('posologie_enfant', 'N/R')}\n⚠️ **Contre-indications :** {med.get('contre_indications', 'N/R')}"
+            elif "prix" in prompt_lower or "coût" in prompt_lower or "combien" in prompt_lower:
+                reponse = f"💊 **{med['nom']}** : {med['prix_fcfa']:,} FCFA"
+            else:
+                reponse = f"💊 **{med['nom']}**\n📋 {med.get('indications', 'N/R')}\n💰 {med['prix_fcfa']:,} FCFA\n🧑 {med.get('posologie_adulte', 'N/R')}\n🧒 {med.get('posologie_enfant', 'N/R')}\n⚠️ {med.get('contre_indications', 'N/R')}"
+        elif "pharmacie" in prompt_lower or "garde" in prompt_lower:
+            gardes = [p for p in st.session_state.pharmacies_db if p.get("est_de_garde", True)]
+            if gardes:
+                noms = ", ".join([f"{p['nom']} ({p['commune']})" for p in gardes[:5]])
+                reponse = f"🟢 Pharmacies de garde : {noms}. Consultez la page dédiée."
+            else:
+                reponse = "Aucune pharmacie de garde trouvée."
+        elif any(mot in prompt_lower for mot in ["bonjour", "salut", "coucou"]):
+            reponse = "👋 Bonjour ! Comment puis-je vous aider ?"
+        elif "merci" in prompt_lower:
+            reponse = "🙏 Je vous en prie !"
+        else:
+            reponse = "❓ Je n'ai pas compris. Essayez de poser une question sur un médicament, une pharmacie, ou un conseil santé."
+        st.session_state.chat_messages.append({"role": "assistant", "content": reponse})
+        st.rerun()
+
+    if st.button("🗑️ Réinitialiser le chat", use_container_width=True):
+        st.session_state.chat_messages = [
+            {"role": "assistant", "content": "👋 Bonjour ! Je suis **PharmaBot**. Posez-moi vos questions sur les médicaments, les posologies, les pharmacies ou la santé au Niger !"}
+        ]
         st.rerun()
 
 # ==============================================================================
@@ -835,7 +1062,7 @@ if st.session_state.page == "Accueil":
         if st.button("🆘 Conseils Santé", use_container_width=True):
             navigate("Conseils Santé")
     with col2:
-        if st.button("📦 Gestion des stocks", use_container_width=True):
+        if st.button("📊 Gestion des stocks", use_container_width=True):
             navigate("Gestion Médicaments")
         if st.button("💬 PharmaBot", use_container_width=True):
             navigate("Chatbot")
@@ -846,7 +1073,7 @@ if st.session_state.page == "Accueil":
     st.caption(f"Dernière mise à jour : {date.today().strftime('%d/%m/%Y')}  |  {len(st.session_state.meds_db)} médicaments référencés")
 
 # ------------------------------------------------------------------------------
-# PHARMACIES DE GARDE
+# PHARMACIES DE GARDE (intégration des fonctionnalités de mise à jour)
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Pharmacies de Garde":
     st.markdown("""
@@ -856,6 +1083,77 @@ elif st.session_state.page == "Pharmacies de Garde":
     </div>
     """, unsafe_allow_html=True)
 
+    # ===== SECTION MISE À JOUR AUTOMATIQUE =====
+    with st.expander("🔄 Mise à jour automatique depuis le site officiel", expanded=False):
+        st.markdown("Cliquez pour mettre à jour les pharmacies de garde à partir du site officiel.")
+        if st.button("🔄 Mettre à jour depuis le site", use_container_width=True):
+            with st.spinner("⏳ Récupération des données..."):
+                success = mettre_a_jour_pharmacies_garde()
+                if success:
+                    st.balloons()
+                else:
+                    st.warning("La mise à jour automatique a échoué. Vous pouvez consulter le site manuellement ci-dessous.")
+        if st.button("🔗 Ouvrir le site", use_container_width=True):
+            webbrowser.open("https://www.medic-rdv.com/rdv/pharmacidegarde")
+            st.toast("✅ Page ouverte dans votre navigateur", icon="🌐")
+
+    # ===== SECTION ÉDITION MANUELLE DES STATUTS =====
+    with st.expander("✏️ Édition manuelle des statuts de garde", expanded=False):
+        st.info("💡 Basculez manuellement le statut de chaque pharmacie.")
+        communes = ["Toutes les Communes"] + sorted(list(set(p["commune"] for p in st.session_state.pharmacies_db)))
+        col_filtre, col_search = st.columns([1, 2])
+        with col_filtre:
+            filtre_commune = st.selectbox("📌 Filtrer par commune", communes)
+        with col_search:
+            search = st.text_input("🔍 Rechercher (nom ou adresse)", placeholder="ex: 7 THERAPIES...")
+        pharma_affichees = st.session_state.pharmacies_db
+        if filtre_commune != "Toutes les Communes":
+            pharma_affichees = [p for p in pharma_affichees if p["commune"] == filtre_commune]
+        if search:
+            pharma_affichees = [p for p in pharma_affichees if search.lower() in p["nom"].lower() or search.lower() in p["adresse"].lower()]
+        if not pharma_affichees:
+            st.warning("Aucune pharmacie ne correspond à vos critères.")
+        else:
+            st.write(f"**{len(pharma_affichees)}** pharmacie(s) affichée(s)")
+            for p in pharma_affichees:
+                col_info, col_bouton = st.columns([4, 1])
+                with col_info:
+                    statut_actuel = p.get("est_de_garde", True)
+                    statut_texte = "✅ De garde" if statut_actuel else "❌ Pas de garde"
+                    tel_aff = p['tel'] if p['tel'] else "N/A"
+                    adresse_aff = p['adresse'] if p['adresse'] else "Adresse non précisée"
+                    st.markdown(f"""
+                    <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 10px 15px; border-radius: 12px; margin-bottom: 6px; border-left: 4px solid {'#2b9348' if statut_actuel else '#d9534f'};">
+                        <div style="flex:1;">
+                            <strong style="color:#1a3a2a;">🏥 {p['nom']}</strong><br>
+                            <span style="font-size:0.85rem; color:#4b5e5e;">📍 {adresse_aff} &nbsp;|&nbsp; 📞 {tel_aff}</span><br>
+                            <span style="font-size:0.8rem; background: {'#d4edda' if statut_actuel else '#f8d7da'}; padding:2px 10px; border-radius:30px; color: {'#155724' if statut_actuel else '#721c24'};">
+                                {statut_texte}
+                            </span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_bouton:
+                    if st.button("✅" if statut_actuel else "❌", key=f"toggle_{p['id']}", use_container_width=True):
+                        p["est_de_garde"] = not statut_actuel
+                        st.toast(f"Statut de {p['nom']} mis à jour", icon="🔄")
+                        st.rerun()
+
+    # ===== SECTION ACTUALISATION DES PRIX =====
+    with st.expander("💰 Actualisation automatique des prix des médicaments", expanded=False):
+        st.markdown("Cliquez pour actualiser les prix des médicaments depuis le site de référence.")
+        if st.button("🔄 Actualiser les prix", use_container_width=True):
+            with st.spinner("⏳ Récupération en cours..."):
+                nb_updated, nb_trouves = actualiser_prix_medicaments()
+                if nb_updated > 0:
+                    st.toast(f"✅ {nb_updated} médicaments mis à jour", icon="💰")
+                    st.balloons()
+                else:
+                    st.warning(f"⚠️ Aucun médicament mis à jour. {nb_trouves} prix trouvés sur le site.")
+
+    st.markdown("---")
+
+    # ===== AFFICHAGE DES PHARMACIES DE GARDE =====
     if st.session_state.ville_filter != "Toutes les villes":
         gardes_actives = [p for p in st.session_state.pharmacies_db if p.get("est_de_garde", True) and p["ville"] == st.session_state.ville_filter]
     else:
@@ -882,6 +1180,9 @@ elif st.session_state.page == "Pharmacies de Garde":
     for p in pharma_filtrees:
         tel_aff = p['tel'] if p['tel'] else "N/A"
         est_favori = p['id'] in st.session_state.favoris
+        adresse_complete = f"{p['adresse']}, {p['ville']}, Niger"
+        maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(adresse_complete)}"
+
         col1, col2 = st.columns([5, 1])
         with col1:
             st.markdown(f"""
@@ -890,7 +1191,8 @@ elif st.session_state.page == "Pharmacies de Garde":
                 <h4>🏥 PHARMACIE {p['nom']} {'⭐' if est_favori else ''}</h4>
                 <p style="margin:4px 0;">📍 {p['adresse'] if p['adresse'] else 'Adresse non précisée'}</p>
                 <p style="margin:2px 0;">📞 {f'<a href="tel:+227{str(p["tel"]).replace(" ", "")}" class="tel">+227 {p["tel"]}</a>' if p['tel'] else '📞 N/A'}</p>
-                <span class="statut statut-garde">✅ De garde</span>
+                <a href="{maps_link}" target="_blank"><button style="background:#2b9348; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; margin-top:4px;">🗺️ Itinéraire</button></a>
+                <span class="statut statut-garde" style="margin-left:10px;">✅ De garde</span>
             </div>
             """, unsafe_allow_html=True)
         with col2:
@@ -904,7 +1206,7 @@ elif st.session_state.page == "Pharmacies de Garde":
                 st.rerun()
 
 # ------------------------------------------------------------------------------
-# TOUTES LES PHARMACIES
+# TOUTES LES PHARMACIES (avec bouton Google Maps)
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Toutes les Pharmacies":
     st.markdown("""
@@ -942,6 +1244,9 @@ elif st.session_state.page == "Toutes les Pharmacies":
         statut_texte = "✅ De garde" if p.get("est_de_garde", True) else "❌ Pas de garde"
         tel_link = f'<a href="tel:+227{str(p["tel"]).replace(" ", "")}" class="tel">+227 {p["tel"]}</a>' if p['tel'] else '📞 N/A'
         est_favori = p['id'] in st.session_state.favoris
+        adresse_complete = f"{p['adresse']}, {p['ville']}, Niger"
+        maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(adresse_complete)}"
+
         col1, col2 = st.columns([5, 1])
         with col1:
             st.markdown(f"""
@@ -950,7 +1255,8 @@ elif st.session_state.page == "Toutes les Pharmacies":
                 <h4>🏥 PHARMACIE {p['nom']} {'⭐' if est_favori else ''}</h4>
                 <p style="margin:4px 0;">📍 {p['adresse'] if p['adresse'] else 'Adresse non précisée'}</p>
                 <p style="margin:2px 0;">📞 {tel_link}</p>
-                <span class="statut {statut_classe}">{statut_texte}</span>
+                <a href="{maps_link}" target="_blank"><button style="background:#2b9348; color:white; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; margin-top:4px;">🗺️ Itinéraire</button></a>
+                <span class="statut {statut_classe}" style="margin-left:10px;">{statut_texte}</span>
             </div>
             """, unsafe_allow_html=True)
         with col2:
@@ -1010,7 +1316,7 @@ elif st.session_state.page == "Prix des Médicaments":
                 """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# GESTION DES STOCKS
+# GESTION MÉDICAMENTS
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Gestion Médicaments":
     st.markdown("""
@@ -1082,7 +1388,7 @@ elif st.session_state.page == "Gestion Médicaments":
         st.balloons()
 
 # ------------------------------------------------------------------------------
-# CHATBOT
+# CHATBOT (page dédiée)
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Chatbot":
     st.markdown("""
@@ -1130,6 +1436,7 @@ elif st.session_state.page == "Chatbot":
             st.session_state.chat_messages.append({"role": "assistant", "content": reponse})
             st.rerun()
 
+    # Affichage complet de l'historique des messages
     for msg in st.session_state.chat_messages:
         if msg["role"] == "user":
             st.markdown(f"<div style='display:flex; justify-content:flex-end;'><div class='chat-message-user'>{msg['content']}</div></div>", unsafe_allow_html=True)
@@ -1182,18 +1489,28 @@ elif st.session_state.page == "Chatbot":
         st.markdown(f"<div style='display:flex; justify-content:flex-start;'><div class='chat-message-assistant'>{reponse}</div></div>", unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# CONSEILS SANTÉ
+# CONSEILS SANTÉ (avec numéros d'urgence)
 # ------------------------------------------------------------------------------
 elif st.session_state.page == "Conseils Santé":
     st.markdown("""
     <div class="header-main" style="background: linear-gradient(135deg, #1a8c6e 0%, #0e6b4f 100%);">
         <h2 style="margin:0;">🆘 Conseils Santé</h2>
-        <p style="margin:4px 0 0 0;">Premiers secours, hygiène, et bonnes pratiques</p>
+        <p style="margin:4px 0 0 0;">Premiers secours, hygiène, numéros d'urgence et conseils saisonniers</p>
     </div>
     """, unsafe_allow_html=True)
+
+    with st.expander("📞 Numéros d'urgence", expanded=False):
+        st.markdown("""
+        - **Police / Secours** : **17**
+        - **Pompiers** : **18**
+        - **SAMU (Urgences médicales)** : **15**
+        - **Centre antipoison** : (se renseigner auprès des hôpitaux)
+        - **Croix-Rouge du Niger** : (contacter via les numéros locaux)
+        """)
+
     with st.expander("🚑 Premiers secours – que faire en cas d'urgence ?", expanded=False):
         st.markdown("""
-        - **Hémorragie** : Appuyer fortement sur la plaie avec un linge propre, surélever le membre, appeler les secours.
+        - **Hémorragie** : Appuyer fortement sur la plaie avec un linge propre, surélever le membre, appeler les secours (17, 18, 15).
         - **Brûlure** : Refroidir immédiatement sous l'eau fraîche (pas glacée) pendant 15 minutes, couvrir d'un pansement stérile, ne pas percer les cloques.
         - **Malaise / perte de connaissance** : Allonger la personne sur le côté (position latérale de sécurité), dégager les voies respiratoires, appeler les secours.
         - **Ingestion de poison** : Ne pas faire vomir, contacter un centre antipoison ou se rendre aux urgences.
@@ -1224,112 +1541,23 @@ elif st.session_state.page == "Conseils Santé":
         - Utiliser des moustiquaires pour prévenir le paludisme.
         - Se protéger du soleil avec un chapeau et de la crème solaire.
         """)
-    if st.button("⬅ Retour à l'accueil"):
-        navigate("Accueil")
+    with st.expander("🌦️ Conseils saisonniers et climatiques", expanded=False):
+        st.markdown("""
+        **Saison des pluies (juin – septembre)**
+        - **Paludisme** : Les pluies favorisent la reproduction des moustiques. Dormez sous moustiquaire imprégnée, utilisez des répulsifs, et consultez en cas de fièvre.
+        - **Diarrhées et choléra** : L'eau de pluie peut contaminer les sources. Buvez de l'eau traitée (eau de javel, SRO) et lavez-vous les mains avant les repas.
+        - **Infections respiratoires** : L'humidité favorise les rhumes et bronchites. Évitez les courants d'air, portez des vêtements secs.
 
-# ------------------------------------------------------------------------------
-# MISE À JOUR DE LA GARDE
-# ------------------------------------------------------------------------------
-elif st.session_state.page == "Mise à jour de la Garde":
-    st.markdown("""
-    <div class="header-main" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
-        <h2 style="margin:0;">⚙️ Mise à jour du planning</h2>
-        <p style="margin:4px 0 0 0;">Consultez la liste officielle, modifiez les statuts ou actualisez les prix</p>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### 🌐 Consulter la source officielle")
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.write("Ouvrez le site de référence pour voir la liste à jour des pharmacies de garde.")
-    with col2:
-        if st.button("🔗 Ouvrir le site", use_container_width=True):
-            webbrowser.open("https://www.medic-rdv.com/rdv/pharmacidegarde")
-            st.toast("✅ Page ouverte dans votre navigateur", icon="🌐")
-    st.markdown("---")
-    st.markdown("### ✏️ Édition manuelle des statuts")
-    st.info("💡 Basculez manuellement le statut de chaque pharmacie.")
-    communes = ["Toutes les Communes"] + sorted(list(set(p["commune"] for p in st.session_state.pharmacies_db)))
-    col_filtre, col_search = st.columns([1, 2])
-    with col_filtre:
-        filtre_commune = st.selectbox("📌 Filtrer par commune", communes)
-    with col_search:
-        search = st.text_input("🔍 Rechercher (nom ou adresse)", placeholder="ex: 7 THERAPIES...")
-    pharma_affichees = st.session_state.pharmacies_db
-    if filtre_commune != "Toutes les Communes":
-        pharma_affichees = [p for p in pharma_affichees if p["commune"] == filtre_commune]
-    if search:
-        pharma_affichees = [p for p in pharma_affichees if search.lower() in p["nom"].lower() or search.lower() in p["adresse"].lower()]
-    if not pharma_affichees:
-        st.warning("Aucune pharmacie ne correspond à vos critères.")
-    else:
-        st.write(f"**{len(pharma_affichees)}** pharmacie(s) affichée(s)")
-        for p in pharma_affichees:
-            col_info, col_bouton = st.columns([4, 1])
-            with col_info:
-                statut_actuel = p.get("est_de_garde", True)
-                statut_texte = "✅ De garde" if statut_actuel else "❌ Pas de garde"
-                tel_aff = p['tel'] if p['tel'] else "N/A"
-                adresse_aff = p['adresse'] if p['adresse'] else "Adresse non précisée"
-                st.markdown(f"""
-                <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 10px 15px; border-radius: 12px; margin-bottom: 6px; border-left: 4px solid {'#2b9348' if statut_actuel else '#d9534f'};">
-                    <div style="flex:1;">
-                        <strong style="color:#1a3a2a;">🏥 {p['nom']}</strong><br>
-                        <span style="font-size:0.85rem; color:#4b5e5e;">📍 {adresse_aff} &nbsp;|&nbsp; 📞 {tel_aff}</span><br>
-                        <span style="font-size:0.8rem; background: {'#d4edda' if statut_actuel else '#f8d7da'}; padding:2px 10px; border-radius:30px; color: {'#155724' if statut_actuel else '#721c24'};">
-                            {statut_texte}
-                        </span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_bouton:
-                if st.button("✅" if statut_actuel else "❌", key=f"toggle_{p['id']}", use_container_width=True):
-                    p["est_de_garde"] = not statut_actuel
-                    st.toast(f"Statut de {p['nom']} mis à jour", icon="🔄")
-                    st.rerun()
-    st.markdown("---")
-    st.markdown("### 📊 Actualisation automatique des prix")
-    if st.button("🔄 Actualiser les prix des médicaments", use_container_width=True):
-        with st.spinner("⏳ Récupération en cours..."):
-            nb_updated, nb_trouves = actualiser_prix_medicaments()
-            if nb_updated > 0:
-                st.toast(f"✅ {nb_updated} médicaments mis à jour", icon="💰")
-                st.balloons()
-            else:
-                st.warning(f"⚠️ Aucun médicament mis à jour. {nb_trouves} prix trouvés sur le site.")
-    if st.button("⬅ Retour à l'accueil"):
-        navigate("Accueil")
+        **Saison sèche (octobre – mai)**
+        - **Méningite** : La poussière et la sécheresse augmentent le risque de méningite. Consultez si vous avez une forte fièvre, des maux de tête violents, une raideur de la nuque.
+        - **Déshydratation** : Buvez beaucoup d'eau, surtout si vous travaillez en extérieur. Les enfants et les personnes âgées sont les plus vulnérables.
+        - **Irritations oculaires** : Portez des lunettes de protection contre la poussière, et utilisez des larmes artificielles si nécessaire.
 
-# ------------------------------------------------------------------------------
-# EXPORT
-# ------------------------------------------------------------------------------
-elif st.session_state.page == "Export":
-    st.markdown("""
-    <div class="header-main" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);">
-        <h2 style="margin:0;">📤 Exporter les données</h2>
-        <p style="margin:4px 0 0 0;">Téléchargez la liste des médicaments ou des pharmacies</p>
-    </div>
-    """, unsafe_allow_html=True)
-    choix = st.radio("Choisissez les données à exporter :", ["Médicaments", "Pharmacies"])
-    if choix == "Médicaments":
-        df = pd.DataFrame(st.session_state.meds_db)
-        csv = df.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            label="📥 Télécharger les médicaments (CSV)",
-            data=csv,
-            file_name="medicaments_niger.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    else:
-        df = pd.DataFrame(st.session_state.pharmacies_db)
-        csv = df.to_csv(index=False, encoding='utf-8-sig')
-        st.download_button(
-            label="📥 Télécharger les pharmacies (CSV)",
-            data=csv,
-            file_name="pharmacies_niger.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        **Toute l'année**
+        - **Paludisme** : Le paludisme est endémique au Niger. En cas de fièvre, faites un test rapide et prenez un traitement adapté.
+        - **Diabète et hypertension** : Surveillez votre alimentation, évitez les excès de sel et de sucre, et faites de l'exercice régulièrement.
+        - **Grossesse** : Consultez régulièrement un médecin, prenez de l'acide folique, et faites-vous vacciner contre la rougeole et la rubéole si nécessaire.
+        """)
     if st.button("⬅ Retour à l'accueil"):
         navigate("Accueil")
 
@@ -1360,18 +1588,40 @@ elif st.session_state.page == "Feedback":
 elif st.session_state.page == "A propos de l'auteur...":
     st.markdown("""
     <div class="header-main" style="background: linear-gradient(135deg, #1a3a2a 0%, #0f2a1e 100%);">
-        <h2 style="margin:0;">👨‍💻 À propos de l'auteur</h2>
+        <h2 style="margin:0;">📖 À propos de l'application</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card" style="margin-bottom: 20px;">
+        <h4 style="color:#2b9348;">PharmaNiger Pro</h4>
+        <p>
+            PharmaNiger Pro est une application conçue pour faciliter l'accès aux informations de santé publique au Niger.
+            Elle permet de :
+        </p>
+        <ul>
+            <li>📍 Localiser les pharmacies de garde avec itinéraire Google Maps</li>
+            <li>💊 Consulter les prix et notices de plus de 100 médicaments</li>
+            <li>📦 Gérer les stocks de médicaments par pharmacie</li>
+            <li>💬 Poser des questions à PharmaBot (assistant virtuel)</li>
+            <li>🆘 Accéder à des conseils santé, numéros d'urgence et informations saisonnières</li>
+        </ul>
+        <p style="color:#6b7a7a; font-size:0.9rem;">Version 2.9 – 2026</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="header-main" style="background: linear-gradient(135deg, #1a3a2a 0%, #0f2a1e 100%);">
+        <h2 style="margin:0;">👩‍💻 À propos de l'auteure</h2>
     </div>
     """, unsafe_allow_html=True)
     st.markdown("""
     <div class="card" style="text-align:center; padding:2rem;">
         <div style="font-size:60px; margin-bottom:10px;">🇳🇪</div>
-        <h3 style="color:#2b9348;">Amady Pabame</h3>
-        <p><strong>Spécialité :</strong><br>Doctorant en Mathématiques & Ingénieur en Intelligence Artificielle (Data Science appliquée)</p>
+        <h3 style="color:#2b9348;">Honorine Ph. TCHAOU</h3>
+        <p><strong>Élève au collège Mariama</strong><br>Passionnée par la santé publique et les technologies numériques</p>
         <hr style="width:50%; margin: 20px auto;">
         <p style="color:#6b7a7a;">Cette application a été développée pour faciliter l'accès aux informations de santé publique au Niger.</p>
         <p style="color:#6b7a7a; font-size:0.9rem;">Développé avec ❤️ et Streamlit</p>
-        <p style="color:#6b7a7a; font-size:0.9rem;">Version 2.5 – 2026</p>
     </div>
     """, unsafe_allow_html=True)
     if st.button("⬅ Retour à l'accueil"):
@@ -1420,6 +1670,6 @@ elif st.session_state.page == "Dashboard":
 # ==============================================================================
 st.markdown("""
 <div class="footer">
-    PharmaNiger Pro v2.5 — © 2026 · <a href="#">Amady Pabame</a> · Tous droits réservés 🇳🇪
+    PharmaNiger Pro v2.9 — © 2026 · <a href="#">Honorine Ph. TCHAOU</a> · Tous droits réservés 🇳🇪
 </div>
 """, unsafe_allow_html=True)
